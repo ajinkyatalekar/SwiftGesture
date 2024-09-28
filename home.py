@@ -1,15 +1,89 @@
 import cv2
 import streamlit as st
 import numpy as np
-import os
 
+from mediapipe import solutions
+from mediapipe.framework.formats import landmark_pb2
+import numpy as np
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+import cv2
+import time
+import streamlit as st
+
+from script import *
+
+st.set_page_config(layout="wide")
 st.title("SwiftGesture")
-st.text("Generate and run real-time gesture detection models in seconds! Train a new \nmodel, or run an exisiting one.")
+st.text("Generate and run real-time gesture recognition models in seconds! Train a new model, or run an exisiting one.")
 
-st.subheader("Train a model")
-st.text("Train a model to detect custom hand-landmarking gestures.")
-button_train = st.button("Train")
-
+# Running a model - Streamlit section
 st.subheader("Run a model")
-st.text("Run a model to detect gestures.")
+st.text("Run an existing model to detect gestures. (Make sure the model is in /models)")
+
+model_path = file_selector()
+st.write('You selected `%s`' % model_path)
 button_run = st.button("Run")
+run_frame_placeholder = st.empty()
+
+# Running model
+latest_detection_result = None
+def result_callback(result, output_image, timestamp_ms):
+    global latest_detection_result
+    latest_detection_result = result
+
+if button_run:
+    # Handlandmarker detector setup
+    base_options = python.BaseOptions(model_asset_path='src/hand_landmarker.task')
+    options = vision.HandLandmarkerOptions(
+        base_options=base_options,
+        num_hands=1,
+        running_mode=vision.RunningMode.LIVE_STREAM,
+        result_callback=result_callback
+    )
+
+    detector = vision.HandLandmarker.create_from_options(options)
+
+    # Gesture detector setup
+    gesture_detector = gesture_model(model_path)
+    label,score = ('No hand detected', 0.0)
+
+    cap = cv2.VideoCapture(0)
+
+    button_run_stop = st.button("Stop")
+    while (cap.isOpened and not button_run_stop):
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+        timestamp_ms = int(time.time() * 1000)
+        detector.detect_async(image, timestamp_ms=timestamp_ms)
+
+        if latest_detection_result:
+            label, score = gesture_detector.predict(latest_detection_result, 0.5)
+            annotated_image = draw_landmarks_on_image(frame, latest_detection_result, label, score)
+        else:
+            annotated_image = frame
+
+        annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+
+        run_frame_placeholder.image(annotated_image, channels="RGB")
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+st.subheader("OR")
+
+
+# Training a model - Streamlit section
+st.subheader("Train a model")
+st.text("Train your own model to detect custom hand-landmarking gestures.")
+st.text("<Still in the works!>")
+button_train = st.button("Train")
+train_frame_placeholder = st.empty()
