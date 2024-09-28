@@ -81,6 +81,17 @@ st.subheader("OR")
 # Training a model - Streamlit section
 st.subheader("Train a model")
 st.text("Train your own model to detect custom hand-landmarking gestures.")
-st.text("<Still in the works!>")
-button_train = st.button("Train")
+
+# Model name
+model_name_input = st.text_input("What would you like to name the model?")
+st.write('Your model will be saved at: `models/%s`' % model_name_input)
+
+# Gesture names
+gesture_list_input = st.text_input("Enter gesture names as a comma separated list.", "fist,palm")
+gesture_list_input = gesture_list_input.replace(" ", "").split(",")
+st.write(gesture_list_input if len(gesture_list_input) >= 1 and gesture_list_input[0]!="" else "")
+
+button_train = st.button("Begin Training")
 train_frame_placeholder = st.empty()
+
+# Training model

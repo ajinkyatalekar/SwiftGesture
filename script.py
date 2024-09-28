@@ -17,11 +17,11 @@ def file_selector(folder_path='models'):
 
 # Visualization
 def draw_landmarks_on_image(rgb_image, detection_result, label, score = ""):
-    MARGIN = 30  # pixels
+    MARGIN = 30
     FONT_SIZE = 1
     FONT_THICKNESS = 2
-    HANDEDNESS_TEXT_COLOR = (88, 205, 54) # vibrant green
-    
+    HANDEDNESS_TEXT_COLOR = (88, 205, 54)
+
     hand_landmarks_list = detection_result.hand_landmarks
     handedness_list = detection_result.handedness
     annotated_image = np.copy(rgb_image)
@@ -50,7 +50,7 @@ def draw_landmarks_on_image(rgb_image, detection_result, label, score = ""):
         text_x = int(min(x_coordinates) * width)
         text_y = int(min(y_coordinates) * height) - MARGIN
 
-        # Draw handedness (left or right hand) on the image.
+        # Add annotations
         text_str = f"{handedness[0].category_name} Adding {label}"
         if score:
             text_str = f"{label} {handedness[0].category_name} {score:.2f}"
@@ -61,7 +61,7 @@ def draw_landmarks_on_image(rgb_image, detection_result, label, score = ""):
 
     return annotated_image
 
-# Model predictions
+# Running a model
 class gesture_model:
     def __init__(self, model_path):
         self.loaded_model = load_model(f'{model_path}/model.keras')
@@ -91,3 +91,25 @@ class gesture_model:
                 return ('Unknown', 0.0)
 
         return (self.all_labels[np.argmax(prediction)], prediction.max())
+
+
+class gesture_model_trainer:
+    def __init__(self):
+        pass
+
+    # add detection and current_gesture to a variable that can be exported to a json file
+    def add_detection_object(self, base, current_gesture, detection):
+    
+        if not detection.hand_world_landmarks:
+            return
+            
+        landmarks = []
+        for landmark in detection.hand_world_landmarks[0]:
+            landmarks.append([landmark.x, landmark.y, landmark.z])
+
+        data = {
+            "gesture": current_gesture,
+            "landmarks": landmarks
+        }
+
+        base["data"].append(data)
