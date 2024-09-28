@@ -8,6 +8,8 @@ import numpy as np
 from mediapipe.framework.formats import landmark_pb2
 from mediapipe import solutions
 import cv2
+import mediapipe as mp
+import time
 
 # Streamlit webapp functionality
 def file_selector(folder_path='models'):
@@ -93,23 +95,82 @@ class gesture_model:
         return (self.all_labels[np.argmax(prediction)], prediction.max())
 
 
+# Training a model
 class gesture_model_trainer:
     def __init__(self):
         pass
 
     # add detection and current_gesture to a variable that can be exported to a json file
     def add_detection_object(self, base, current_gesture, detection):
-    
         if not detection.hand_world_landmarks:
             return
             
         landmarks = []
         for landmark in detection.hand_world_landmarks[0]:
             landmarks.append([landmark.x, landmark.y, landmark.z])
-
         data = {
             "gesture": current_gesture,
             "landmarks": landmarks
         }
-
         base["data"].append(data)
+
+    def run_train_loop(self, gestures, train_frame_placeholder):
+        gesture_index = 0
+
+        self.latest_detection_result = None
+        def result_callback(result, output_image, timestamp_ms):
+            self.latest_detection_result = result
+
+        base_options = python.BaseOptions(model_asset_path='src/hand_landmarker.task')
+        options = vision.HandLandmarkerOptions(
+            base_options=base_options,
+            num_hands=2,
+            running_mode=vision.RunningMode.LIVE_STREAM,
+            result_callback=result_callback
+        )
+        detector = vision.HandLandmarker.create_from_options(options)
+
+        # Creating variables for database
+        base = {
+            "data": [],
+            "labels": gestures
+        }
+
+        cap = cv2.VideoCapture(0)
+
+        while gesture_index < len(gestures):
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            current_gesture = gestures[gesture_index]
+
+            # STEP 3: Load the input image.
+            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+            timestamp_ms = int(time.time() * 1000)
+
+            # Perform detection asynchronously
+            detector.detect_async(image, timestamp_ms=timestamp_ms)
+
+            # Draw landmarks on the image
+            if self.latest_detection_result:
+                annotated_image = draw_landmarks_on_image(frame, self.latest_detection_result, current_gesture)
+            else:
+                annotated_image = frame
+
+            # Display the resulting frame
+            annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+            train_frame_placeholder.image(annotated_image, channels="RGB")
+
+            # Controls
+            key = cv2.waitKey(1) & 0xFF
+            if key:
+                if key == ord(' '): # Space to next image
+                    obj = add_detection_object(base, current_gesture, self.latest_detection_result)
+                    
+                elif key == 13: # Enter to next gesture
+                    gesture_index += 1
+            
+
+        cap.release()
+        cv2.destroyAllWindows()

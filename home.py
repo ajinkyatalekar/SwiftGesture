@@ -94,4 +94,9 @@ st.write(gesture_list_input if len(gesture_list_input) >= 1 and gesture_list_inp
 button_train = st.button("Begin Training")
 train_frame_placeholder = st.empty()
 
+
 # Training model
+if button_train:
+    button_abort = st.button("Abort")
+    trainer = gesture_model_trainer()
+    trainer.run_train_loop(gesture_list_input, train_frame_placeholder)
