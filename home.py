@@ -97,6 +97,7 @@ train_frame_placeholder = st.empty()
 
 # Training model
 if button_train:
+    st.text("Put your palm up and do the gesture currently being trained. The screen will flash when a photo is taken.\nMove your fingers slightly between photos to train the model more effectively.")
     button_abort = st.button("Abort")
     trainer = gesture_model_trainer()
     trainer.run_train_loop(gesture_list_input, train_frame_placeholder, model_name_input)
