@@ -99,4 +99,4 @@ train_frame_placeholder = st.empty()
 if button_train:
     button_abort = st.button("Abort")
     trainer = gesture_model_trainer()
-    trainer.run_train_loop(gesture_list_input, train_frame_placeholder)
+    trainer.run_train_loop(gesture_list_input, train_frame_placeholder, model_name_input)

@@ -114,7 +114,7 @@ class gesture_model_trainer:
         }
         base["data"].append(data)
 
-    def run_train_loop(self, gestures, train_frame_placeholder):
+    def run_train_loop(self, gestures, train_frame_placeholder, model_id):
         gesture_index = 0
 
         self.latest_detection_result = None
@@ -136,8 +136,10 @@ class gesture_model_trainer:
             "labels": gestures
         }
 
-        cap = cv2.VideoCapture(0)
+        start_time = time.time()+3
+        imgs_added = 0
 
+        cap = cv2.VideoCapture(0)
         while gesture_index < len(gestures):
             ret, frame = cap.read()
             if not ret:
@@ -159,18 +161,120 @@ class gesture_model_trainer:
                 annotated_image = frame
 
             # Display the resulting frame
-            annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+            if (time.time() - start_time < 2.8):
+                annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+
             train_frame_placeholder.image(annotated_image, channels="RGB")
 
-            # Controls
-            key = cv2.waitKey(1) & 0xFF
-            if key:
-                if key == ord(' '): # Space to next image
-                    obj = add_detection_object(base, current_gesture, self.latest_detection_result)
-                    
-                elif key == 13: # Enter to next gesture
-                    gesture_index += 1
-            
+            if (time.time() - start_time >= 3):
+                obj = self.add_detection_object(base, current_gesture, self.latest_detection_result)
+                start_time = time.time()
+                imgs_added += 1
 
+                if (imgs_added > 3):
+                    gesture_index += 1
+                    imgs_added = 0
+            
         cap.release()
         cv2.destroyAllWindows()
+
+        with open("temp/database.json", "w") as f:
+            json.dump(base, f)
+
+        import random
+        from tensorflow.keras.utils import to_categorical
+
+        def get_data(filepath):
+            """Gets the labels and data from a JSON file.
+
+            Args:
+                filepath: Path to the JSON file.
+
+            Returns:
+                A tuple containing the labels and data.
+            """
+            
+            with open(filepath, 'r') as f:
+                file = json.load(f)
+
+            all_labels = file["labels"]
+
+            data = []
+            data_labels = []
+
+            file_data = file["data"]
+            random.shuffle(file_data)
+            for item in file_data:
+                data_labels.append(all_labels.index(item['gesture']))
+                data.append(item['landmarks'])
+            
+            data_labels = to_categorical(np.array(data_labels), num_classes=len(all_labels))
+            data = np.array(data)
+
+            return data, data_labels, all_labels
+
+        data, labels, all_labels = get_data('temp/database.json')
+
+        train = data[:int(len(data)*0.8)]
+        train_labels = labels[:int(len(labels)*0.8)]
+        test = data[int(len(data)*0.8):]
+        test_labels = labels[int(len(labels)*0.8):]
+
+        num_labels = len(all_labels)
+
+        print(f"train: data {train.shape}, labels {train_labels.shape}")
+        print(f"test: data {test.shape}, labels {test_labels.shape}")
+
+
+        import tensorflow as tf
+        from tensorflow.keras import layers, models
+
+        def create_point_classification_model():
+            # Input shape: 21 3D points, each point has x, y, z coordinates
+            input_shape = (21, 3)
+
+            model = models.Sequential([
+                layers.Flatten(input_shape=input_shape),
+
+                # Dense layers with increasing complexity
+                layers.Dense(128, activation='relu'),
+                layers.Dense(256, activation='relu'),
+                layers.Dense(512, activation='relu'),
+
+                # Dropout for regularization
+                layers.Dropout(0.3),
+
+                # Output layer with 36 classes
+                layers.Dense(num_labels, activation='softmax')
+            ])
+
+            model.compile(optimizer='adam',
+                        loss='categorical_crossentropy',
+                        metrics=['accuracy'])
+
+            return model
+
+        # Create the model
+        model = create_point_classification_model()
+
+        # Display the model summary
+        model.summary()
+
+        history = model.fit(
+            train, train_labels,
+            epochs=100,
+            batch_size=32,
+            validation_split=0.2,
+            verbose=1
+        )
+
+        model_path = f'models/{model_id}'
+        if not os.path.exists(model_path):
+            os.makedirs(model_path)
+
+        model.evaluate(test, test_labels)
+        model.save(f"{model_path}/model.keras")
+
+        label_map = {i:all_labels[i] for i in range(len(all_labels))}
+        with open(f"{model_path}/label_map.json", "w") as f:
+            json.dump(label_map, f)
